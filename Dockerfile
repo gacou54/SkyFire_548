@@ -62,6 +62,16 @@ RUN set -eux; \
     cd /; rm -rf /tmp/openssl-*
 
 ############################################################################
+# extra_modules: out-of-tree modules, empty by default. Replace it with a
+# named build context (a local folder or a git URL):
+#   docker build --build-context extra_modules=../mod-playerbots \
+#                --build-arg EXTRA_MODULE_NAME=mod-playerbots .
+# With EXTRA_MODULE_NAME set, the context is one module and is copied to
+# modules/<name>. Without it, the context holds module folders, like modules/.
+############################################################################
+FROM scratch AS extra_modules
+
+############################################################################
 # build: compile and install SkyFire into /opt/skyfire.
 ############################################################################
 FROM deps AS build
@@ -71,6 +81,7 @@ ARG BUILD_JOBS=
 ARG SCRIPTS=ON
 ARG MODULES=ON
 ARG TOOLS=ON
+ARG EXTRA_MODULE_NAME=
 
 ENV CCACHE_DIR=/ccache \
     CCACHE_MAXSIZE=5G \
@@ -83,6 +94,17 @@ COPY cmake /src/cmake
 COPY dep /src/dep
 COPY modules /src/modules
 COPY src /src/src
+
+RUN --mount=type=bind,from=extra_modules,target=/extra_modules \
+    set -eux; \
+    if [ -n "${EXTRA_MODULE_NAME}" ]; then \
+        mkdir -p "/src/modules/${EXTRA_MODULE_NAME}"; \
+        cp -a /extra_modules/. "/src/modules/${EXTRA_MODULE_NAME}/"; \
+    else \
+        cp -a /extra_modules/. /src/modules/; \
+    fi; \
+    rm -rf /src/modules/*/.git; \
+    ls /src/modules
 
 RUN --mount=type=cache,target=/ccache,id=skyfire-ccache \
     set -eux; \

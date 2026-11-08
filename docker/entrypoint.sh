@@ -12,6 +12,11 @@
 #   SFCONF_<Key with "." written as "__">=<value>
 #   e.g. SFCONF_WorldDatabase__AutoSetup=1  ->  WorldDatabase.AutoSetup = "1"
 #
+# For worldserver, module configs in /opt/skyfire/etc (e.g. playerbots.conf.dist)
+# are rendered the same way. An override goes to the file that defines the key,
+# or, failing that, to the module config that defines keys with the same first
+# segment (SFCONF_Playerbots__Foo -> playerbots.conf), else to worldserver.conf.
+#
 # Any other command (bash, mapextractor, ...) is executed as-is.
 
 set -euo pipefail
@@ -48,32 +53,81 @@ set_conf() {
     ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 }
 
-render_config() {
-    local name=$1; shift
-    local out=$SF_RUN/$name.conf base
+# conf_defines <file> <key> [prefix]: true if the file sets <key>, or with
+# "prefix", any key equal to <key> or starting with "<key>.".
+conf_defines() {
+    K="$2" M="${3:-}" awk '
+        BEGIN { k = ENVIRON["K"]; prefix = ENVIRON["M"] == "prefix"; found = 0 }
+        $0 !~ /^[[:space:]]*#/ && (eq = index($0, "=")) > 0 {
+            name = substr($0, 1, eq - 1)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", name)
+            if (name == k || (prefix && index(name, k ".") == 1)) { found = 1; exit }
+        }
+        END { exit !found }
+    ' "$1"
+}
 
+# stage_config <name>: copy <name>.conf (if mounted) or <name>.conf.dist to $SF_RUN.
+stage_config() {
+    local name=$1 base
     if [[ -f $SF_ETC/$name.conf ]]; then
         base=$SF_ETC/$name.conf
     else
         base=$SF_ETC/$name.conf.dist
     fi
-    log "Rendering $out from $base"
+    log "Rendering $SF_RUN/$name.conf from $base"
+    cp "$base" "$SF_RUN/$name.conf"
+}
+
+# Names of the module configs installed in $SF_ETC (e.g. playerbots).
+module_configs() {
+    local f n
+    for f in "$SF_ETC"/*.conf.dist "$SF_ETC"/*.conf; do
+        [[ -e $f ]] || continue
+        n=${f##*/}; n=${n%.dist}; n=${n%.conf}
+        [[ $n == worldserver || $n == authserver ]] && continue
+        echo "$n"
+    done | sort -u
+}
+
+# render_config <name> [key=value...]
+render_config() {
+    local name=$1; shift
+    local main=$SF_RUN/$name.conf
+    local modules=() m
+
     mkdir -p "$SF_RUN"
-    cp "$base" "$out"
+    stage_config "$name"
+    if [[ $name == worldserver ]]; then
+        mapfile -t modules < <(module_configs)
+        for m in "${modules[@]}"; do
+            stage_config "$m"
+        done
+    fi
 
     # Container defaults, passed as "key=value" pairs.
     local kv
     for kv in "$@"; do
-        set_conf "$out" "${kv%%=*}" "${kv#*=}"
+        set_conf "$main" "${kv%%=*}" "${kv#*=}"
     done
 
     # User overrides.
-    local var key
+    local var key target
     while IFS='=' read -r var _; do
         [[ $var == SFCONF_* ]] || continue
         key=${var#SFCONF_}
         key=${key//__/.}
-        set_conf "$out" "$key" "${!var}"
+        target=$main
+        if ! conf_defines "$main" "$key"; then
+            for m in "${modules[@]}"; do
+                if conf_defines "$SF_RUN/$m.conf" "$key" || \
+                   conf_defines "$SF_RUN/$m.conf" "${key%%.*}" prefix; then
+                    target=$SF_RUN/$m.conf
+                    break
+                fi
+            done
+        fi
+        set_conf "$target" "$key" "${!var}"
     done < <(env)
 }
 
