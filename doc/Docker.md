@@ -94,6 +94,43 @@ To manage a full config file instead, mount it:
       - ./my-worldserver.conf:/opt/skyfire/etc/worldserver.conf:ro
 ```
 
+### Module configs
+
+Module `*.conf.dist` files (from `modules/<mod>/conf/`) are rendered into
+`/opt/skyfire/run/` next to `worldserver.conf`, from a mounted
+`/opt/skyfire/etc/<mod>.conf` if present. An `SFCONF_*` override goes to the
+file that defines the key. A key that no file defines goes to the module config
+that defines keys with the same first segment (`SFCONF_Playerbots__Foo` →
+`playerbots.conf`), and to `worldserver.conf` otherwise.
+
+## Out-of-tree modules
+
+Modules that live in their own repository can be built into the image without
+copying them into `modules/`. Pass the module as the `extra_modules` build
+context, either a local folder or a git URL:
+
+```bash
+docker buildx build \
+    --build-context extra_modules=../mod-playerbots \
+    --build-arg EXTRA_MODULE_NAME=mod-playerbots \
+    -t skyfire548:playerbots .
+```
+
+In a compose file:
+
+```yaml
+    build:
+      context: .
+      additional_contexts:
+        extra_modules: https://github.com/<owner>/mod-playerbots.git#main
+      args:
+        EXTRA_MODULE_NAME: mod-playerbots
+```
+
+`EXTRA_MODULE_NAME` is the folder name under `modules/`, which also sets the
+loader function name (`Addmod_playerbotsScripts()`). Without it, the context
+must contain module folders, laid out like `modules/`.
+
 ## Connecting from another machine
 
 Set `REALM_ADDRESS` in `.env` to the host's LAN or public IP and restart
