@@ -59,6 +59,8 @@ Detailed installation guides are available in the wiki for
 [Ubuntu 24.04](https://wiki.projectskyfire.org/index.php?title=Installation_(Ubuntu_24.04_LTS)) and
 [Mac OSX](https://wiki.projectskyfire.org/index.php?title=Installation_Mac_OS_X).
 
+To run the servers and database with Docker Compose, see [doc/Docker.md](doc/Docker.md).
+
 
 ## Reporting issues
 Please use the search function before you report issues.

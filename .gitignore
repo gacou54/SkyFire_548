@@ -39,3 +39,6 @@ cmake-build-debug/
 /mcp_config.json
 /dbc_export/
 
+
+# Docker
+/.env
