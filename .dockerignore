@@ -1,0 +1,15 @@
+# Only what the Dockerfile COPYs is needed; keep the context small.
+.git
+.github
+.vs
+.idea
+build*
+out
+contrib
+doc
+sql/old
+tools
+docker/data
+docker/client
+*.md
+!README.md
