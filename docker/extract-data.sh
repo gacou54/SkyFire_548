@@ -34,7 +34,8 @@ for step in "${steps[@]}"; do
             ;;
         vmaps)
             echo "==> Extracting and assembling vmaps"
-            vmap4extractor -d "$CLIENT_DIR"
+            # -d takes the Data folder itself (it opens <dir>/world.MPQ, misc.MPQ...).
+            vmap4extractor -d "$CLIENT_DIR/Data"
             mkdir -p vmaps
             vmap4assembler Buildings vmaps
             rm -rf Buildings
